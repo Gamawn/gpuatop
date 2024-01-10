@@ -1,5 +1,5 @@
-use std::process::Command;
-use std::str;
+use std::{io, str};
+use std::process::{Command, ExitStatus, Output};
 use std::thread;
 use std::time::Duration;
 
@@ -17,10 +17,11 @@ enum PackageManager {
     Yum,
 }
 
-fn identify_package_manager() -> PackageManager {
-    let package_managers = vec!["apt", "pacman", "yum"];
 
-    for package_manager in package_managers {
+const PACKAGE_MANAGERS: [&str; 3] = ["apt", "pacman", "yum"];
+
+fn identify_package_manager() -> PackageManager {
+    for package_manager in PACKAGE_MANAGERS {
         let output = Command::new("which")
             .arg(package_manager)
             .output()
@@ -58,36 +59,17 @@ fn identify_gpu_card() -> GpuType {
     }
 }
 
-fn check_top_exists_local(gpu_type: GpuType) -> bool {
-    match gpu_type {
-        GpuType::Nvidia => {
-            let output = Command::new("which")
-                .arg("nvidia-smi")
-                .output()
-                .expect("Failed to execute command");
+fn check_top_exists_local(gpu_type: GpuType) -> io::Result<ExitStatus>  {
+    let cmd = match gpu_type {
+        GpuType::Nvidia => "nvidia-smi",
+        GpuType::Amd => "radeontop",
+        GpuType::Intel => "intel_gpu_top",
+    };
 
-            output.status.success()
-        }
-        GpuType::Amd => {
-            let output = Command::new("which")
-                .arg("radeontop")
-                .output()
-                .expect("Failed to execute command");
-
-            output.status.success()
-        }
-        GpuType::Intel => {
-            let output = Command::new("which")
-                .arg("intel_gpu_top")
-                .output()
-                .expect("Failed to execute command");
-
-            output.status.success()
-        }
-    }
+    Command::new("which").arg(cmd).spawn()?.wait()
 }
 
-fn install_package_for_gpu(package_manager: PackageManager, package_name: &str) {
+fn install_package_for_gpu(package_manager: PackageManager, package_name: &str) -> io::Result<Output>{
     let package_manager_command = match package_manager {
         PackageManager::Apt => "apt",
         PackageManager::Pacman => "pacman",
@@ -107,14 +89,11 @@ fn install_package_for_gpu(package_manager: PackageManager, package_name: &str) 
     };
 
     Command::new(package_manager_command)
-        .arg(package_manager_install_command)
-        .arg(package_manager_install_without_confirm_command)
-        .arg(package_name)
+        .args([package_manager_install_command, package_manager_install_without_confirm_command, package_name])
         .output()
-        .expect("Failed to execute command");
 }
 
-fn install_top_for_gpu_to(gpu_type: GpuType, package_manager: PackageManager) {
+fn install_top_for_gpu_to(gpu_type: GpuType, package_manager: PackageManager) -> io::Result<Output>{
     match gpu_type {
         GpuType::Nvidia => install_package_for_gpu( package_manager, "nvidia-smi"),
         GpuType::Amd => install_package_for_gpu( package_manager, "radeontop"),
@@ -128,7 +107,14 @@ fn main() {
     println!("GPU type: {:?}", gpu_type);
 
     println!("Checking if top exists locally...");
-    let top_exists = check_top_exists_local(gpu_type);
+    let top_exists = match check_top_exists_local(gpu_type) {
+        Ok(ok) => ok.success(),
+        Err(err) => {
+            println!("Error: {}", err);
+            return;
+        }
+    };
+
     println!("Top exists locally: {}", top_exists);
 
     if !top_exists {
@@ -137,14 +123,21 @@ fn main() {
         println!("Package manager: {:?}", package_manager);
 
         println!("Installing top for GPU type...");
-        install_top_for_gpu_to(gpu_type, package_manager);
+        let is_ok = match install_top_for_gpu_to(gpu_type, package_manager) {
+            Ok(e) => e.status.success(),
+            Err(er) => {  println!("Error: {}", er); return; }
+        };
+
+        if !is_ok {
+            println!("Error: Failed to install top for GPU type");
+            return;
+        }
     }
 
     loop {
         let output = match gpu_type {
             GpuType::Nvidia => Command::new("nvidia-smi")
-                .arg("--query-gpu=utilization.gpu")
-                .arg("--format=csv,noheader,nounits")
+                .args(["--query-gpu=utilization.gpu", "--format=csv,noheader,nounits"])
                 .output()
                 .expect("Failed to execute command"),
             GpuType::Amd => Command::new("radeontop")
@@ -152,8 +145,7 @@ fn main() {
                 .output()
                 .expect("Failed to execute command"),
             GpuType::Intel => Command::new("intel_gpu_top")
-                .arg("-s 1")
-                .arg("-o -")
+                .args(["-s", "1","-o", "-"])
                 .output()
                 .expect("Failed to execute command"),
         };
