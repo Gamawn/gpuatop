@@ -14,5 +14,5 @@ jobs:
         uses: taiki-e/upload-rust-binary-action@v1.18.0
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          filename: target/release/gpu_auto_top
+          bin: "target/release/gpu_auto_top"
           tag: ${{ github.ref }}
