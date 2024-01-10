@@ -1,5 +1,6 @@
 use std::{io, str};
 use std::process::{Command, ExitStatus, Output};
+use std::str::FromStr;
 use std::thread;
 use std::time::Duration;
 
@@ -17,6 +18,18 @@ enum PackageManager {
     Yum,
 }
 
+impl FromStr for PackageManager {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(match s {
+            "apt" => PackageManager::Apt,
+            "pacman" => PackageManager::Pacman,
+            "yum" => PackageManager::Yum,
+            _ => return Err("Package manager not found".to_string()),
+        })
+    }
+}
 
 const PACKAGE_MANAGERS: [&str; 3] = ["apt", "pacman", "yum"];
 
@@ -28,12 +41,7 @@ fn identify_package_manager() -> PackageManager {
             .expect("Failed to execute command");
 
         if output.status.success() {
-            match package_manager {
-                "apt" => return PackageManager::Apt,
-                "pacman" => return PackageManager::Pacman,
-                "yum" => return PackageManager::Yum,
-                _ => panic!("Package manager not found"),
-            }
+            return package_manager.parse().expect("Failed to parse package manager");
         }
     }
 
@@ -101,7 +109,7 @@ fn install_top_for_gpu_to(gpu_type: GpuType, package_manager: PackageManager) ->
     }
 }
 
-fn main() {
+fn main() -> Result<(), Box<dyn std::error::Error>>{
     println!("Identifying GPU type...");
     let gpu_type = identify_gpu_card();
     println!("GPU type: {:?}", gpu_type);
@@ -111,7 +119,7 @@ fn main() {
         Ok(ok) => ok.success(),
         Err(err) => {
             println!("Error: {}", err);
-            return;
+            return Ok(());
         }
     };
 
@@ -125,34 +133,25 @@ fn main() {
         println!("Installing top for GPU type...");
         let is_ok = match install_top_for_gpu_to(gpu_type, package_manager) {
             Ok(e) => e.status.success(),
-            Err(er) => {  println!("Error: {}", er); return; }
+            Err(er) => {  println!("Error: {}", er); return Ok(()); }
         };
 
         if !is_ok {
             println!("Error: Failed to install top for GPU type");
-            return;
+            return Ok(());
         }
     }
 
     loop {
-        let output = match gpu_type {
-            GpuType::Nvidia => Command::new("nvidia-smi")
-                .args(["--query-gpu=utilization.gpu", "--format=csv,noheader,nounits"])
-                .output()
-                .expect("Failed to execute command"),
-            GpuType::Amd => Command::new("radeontop")
-                .arg("-d -")
-                .output()
-                .expect("Failed to execute command"),
-            GpuType::Intel => Command::new("intel_gpu_top")
-                .args(["-s", "1","-o", "-"])
-                .output()
-                .expect("Failed to execute command"),
+        let (name, args): (&str, &[&str]) = match gpu_type {
+            GpuType::Nvidia => ("nvidia-smi", &["--query-gpu=utilization.gpu", "--format=csv,noheader,nounits"]),
+            GpuType::Amd => ("radeontop", &["-d -"]),
+            GpuType::Intel => ("intel_gpu_top", &["-s", "1","-o", "-"]),
         };
 
-        let output = str::from_utf8(&output.stdout).expect("Not UTF-8");
+        let output = Command::new(name).args(args).output()?;
 
-        println!("GPU Utilization: {}%", output.trim());
+        print!("GPU Utilization (percent): {}", str::from_utf8(&output.stdout).expect("Not UTF-8"));
 
         thread::sleep(Duration::from_secs(1));
     }
