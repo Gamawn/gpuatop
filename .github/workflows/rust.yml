@@ -1,18 +1,28 @@
 name: Build
 
+permissions:
+  contents: write
+
 on:
   push:
     tags:
       - v[0-9]+.*
 
 jobs:
-  build:
-    name: Build
+  create-release:
     runs-on: ubuntu-latest
     steps:
-      - name: Build and upload Rust binary to GitHub Releases
-        uses: taiki-e/upload-rust-binary-action@v1.18.0
+      - uses: actions/checkout@v4
+      - uses: taiki-e/create-gh-release-action@v1
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          bin: "target/release/gpu_auto_top"
-          tag: ${{ github.ref }}
+
+  upload-assets:
+    needs: create-release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: taiki-e/upload-rust-binary-action@v1
+        with:
+          bin: gpu_auto_top
+          token: ${{ secrets.GITHUB_TOKEN }}
