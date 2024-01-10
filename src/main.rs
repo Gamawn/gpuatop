@@ -87,86 +87,38 @@ fn check_top_exists_local(gpu_type: GpuType) -> bool {
     }
 }
 
+fn install_package_for_gpu(package_manager: PackageManager, package_name: &str) {
+    let package_manager_command = match package_manager {
+        PackageManager::Apt => "apt",
+        PackageManager::Pacman => "pacman",
+        PackageManager::Yum => "yum",
+    };
+
+    let package_manager_install_command = match package_manager {
+        PackageManager::Apt => "install",
+        PackageManager::Pacman => "-S",
+        PackageManager::Yum => "install",
+    };
+
+    let package_manager_install_without_confirm_command = match package_manager {
+        PackageManager::Apt => "-y",
+        PackageManager::Pacman => "--noconfirm",
+        PackageManager::Yum => "-y",
+    };
+
+    Command::new(package_manager_command)
+        .arg(package_manager_install_command)
+        .arg(package_manager_install_without_confirm_command)
+        .arg(package_name)
+        .output()
+        .expect("Failed to execute command");
+}
+
 fn install_top_for_gpu_to(gpu_type: GpuType, package_manager: PackageManager) {
     match gpu_type {
-        GpuType::Nvidia => match package_manager {
-            PackageManager::Apt => {
-                Command::new("apt")
-                    .arg("install")
-                    .arg("-y")
-                    .arg("nvidia-smi")
-                    .output()
-                    .expect("Failed to execute command");
-            }
-            PackageManager::Pacman => {
-                Command::new("pacman")
-                    .arg("-S")
-                    .arg("--noconfirm")
-                    .arg("nvidia-smi")
-                    .output()
-                    .expect("Failed to execute command");
-            }
-            PackageManager::Yum => {
-                Command::new("yum")
-                    .arg("install")
-                    .arg("-y")
-                    .arg("nvidia-smi")
-                    .output()
-                    .expect("Failed to execute command");
-            }
-        },
-        GpuType::Amd => match package_manager {
-            PackageManager::Apt => {
-                Command::new("apt")
-                    .arg("install")
-                    .arg("-y")
-                    .arg("radeontop")
-                    .output()
-                    .expect("Failed to execute command");
-            }
-            PackageManager::Pacman => {
-                Command::new("pacman")
-                    .arg("-S")
-                    .arg("--noconfirm")
-                    .arg("radeontop")
-                    .output()
-                    .expect("Failed to execute command");
-            }
-            PackageManager::Yum => {
-                Command::new("yum")
-                    .arg("install")
-                    .arg("-y")
-                    .arg("radeontop")
-                    .output()
-                    .expect("Failed to execute command");
-            }
-        },
-        GpuType::Intel => match package_manager {
-            PackageManager::Apt => {
-                Command::new("apt")
-                    .arg("install")
-                    .arg("-y")
-                    .arg("intel_gpu_top")
-                    .output()
-                    .expect("Failed to execute command");
-            }
-            PackageManager::Pacman => {
-                Command::new("pacman")
-                    .arg("-S")
-                    .arg("--noconfirm")
-                    .arg("intel_gpu_top")
-                    .output()
-                    .expect("Failed to execute command");
-            }
-            PackageManager::Yum => {
-                Command::new("yum")
-                    .arg("install")
-                    .arg("-y")
-                    .arg("intel_gpu_top")
-                    .output()
-                    .expect("Failed to execute command");
-            }
-        },
+        GpuType::Nvidia => install_package_for_gpu( package_manager, "nvidia-smi"),
+        GpuType::Amd => install_package_for_gpu( package_manager, "radeontop"),
+        GpuType::Intel => install_package_for_gpu( package_manager, "intel_gpu_top"),
     }
 }
 
