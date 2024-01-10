@@ -2,22 +2,17 @@ name: Build
 
 on:
   push:
-    branches: [main]
+    tags:
+      - v[0-9]+.*
 
 jobs:
   build:
     name: Build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@master
-      - name: Compile
-        id: compile
-        uses: rust-build/rust-build.action@v1.4.4
+      - name: Build and upload Rust binary to GitHub Releases
+        uses: taiki-e/upload-rust-binary-action@v1.18.0
         with:
-          RUSTTARGET: x86_64-unknown-linux-musl
-          UPLOAD_MODE: none
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ steps.compile.outputs.artifact_name }}
-          path: ${{ steps.compile.outputs.artifact_path }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+          filename: target/release/gpu_auto_top
+          tag: ${{ github.ref }}
